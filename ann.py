@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 np.random.seed(0)
 
@@ -13,11 +14,13 @@ def spiral_data(points, classes):
         y[ix] = class_number
     return X, y
 
-X, y = spiral_data(50, 3)
+X, y = spiral_data(100, 2)
+
+X = (X - X.mean()) / X.std()
 
 class Layer_Dense:
     def __init__(self, n_inputs, n_neurons):
-        self.weights = 0.1 * np.random.randn(n_inputs, n_neurons)
+        self.weights = np.random.randn(n_inputs, n_neurons) * np.sqrt(2 / n_inputs)
         self.biases = np.zeros((1, n_neurons))
 
     def forward(self, inputs):
@@ -41,6 +44,17 @@ def update_params(weights1, biases1, weights2, biases2, dweights1, dbiases1, dwe
     biases2 -= alpha * dbiases2
 
     return weights1, biases1, weights2, biases2
+
+def update_params_adam(weights, biases, dweights, dbiases, m_w, v_w, m_b, v_b, t, alpha=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8):
+    # m_w = (beta1 * m_w).T + (1 - beta1) * dweights
+    # v_w = (beta2 * v_w).T + (1 - beta2) * (dweights ** 2)
+    m_b = beta1 * m_b + (1 - beta1) * dbiases
+    v_b = beta2 * v_b + (1 - beta2) * (dbiases ** 2)
+
+    # weights -= alpha * m_w / (np.sqrt(v_w) + epsilon)
+    biases -= alpha * m_b / (np.sqrt(v_b) + epsilon)
+
+    return weights, biases, m_w, v_w, m_b, v_b
 
 def deriv_ReLU(Z):
     return Z > 0
@@ -82,22 +96,19 @@ class Loss_CategoricalCrossentropy(Loss):
 dense1 = Layer_Dense(2, 6)
 activation1 = Activation_ReLU()
 
-dense2 = Layer_Dense(6, 3)
+dense2 = Layer_Dense(6, 2)
 activation2 = Activation_Softmax()
 
-# dense1.forward(X)
-# activation1.forward(dense1.output)
-
-# dense2.forward(activation1.output)
-# activation2.forward(dense2.output)
-
-# print(activation2.output[:5])
-
-def gradient_descent(X, y, iterations, alpha):
+def gradient_descent(X, y, iterations, alpha, optimizer="adam"):
     weights1 = dense1.weights
     biases1 = dense1.biases
     weights2 = dense2.weights
     biases2 = dense2.biases
+    
+    m_w1, v_w1, m_b1, v_b1 = np.zeros_like(weights1), np.zeros_like(weights1), np.zeros_like(biases1), np.zeros_like(biases1)
+    m_w2, v_w2, m_b2, v_b2 = np.zeros_like(weights2), np.zeros_like(weights2), np.zeros_like(biases2), np.zeros_like(biases2)
+    
+    loss_history = []
 
     for i in range(iterations):
         #Forwards
@@ -110,17 +121,30 @@ def gradient_descent(X, y, iterations, alpha):
         DWeights1, DBiases1, DWeights2, DBiases2 = backward(dense1.output, activation1.output, activation2.output, dense2.weights, X, y)
 
         #Update
-        weights1, biases1, weights2, biases2 = update_params(weights1, biases1, weights2, biases2, DWeights1, DBiases1, DWeights2, DBiases2, alpha)
+        if optimizer == 'adam':
+            weights1, biases1, m_w1, v_w1, m_b1, v_b1 = update_params_adam(
+                weights1, biases1, DWeights1, DBiases1, m_w1, v_w1, m_b1, v_b1, i, alpha=alpha
+            )
+            weights2, biases2, m_w2, v_w2, m_b2, v_b2 = update_params_adam(
+                weights2, biases2, DWeights2, DBiases2, m_w2, v_w2, m_b2, v_b2, i, alpha=alpha
+            )
+        else:
+            weights1, biases1, weights2, biases2 = update_params(weights1, biases1, weights2, biases2, DWeights1, DBiases1, DWeights2, DBiases2, alpha)
+        
 
         #Loss
         loss_function = Loss_CategoricalCrossentropy()
         loss = loss_function.calculate(activation2.output, y)
-
-        #Results
-        if i % 10 == 0:
-            print("Iteration: ", i)
-            print("Loss:", loss)
+        
+        loss_history.append(loss)
+        
+    #Results
+    # plt.plot(loss_history)
+    # plt.title('Loss over iterations')
+    # plt.xlabel('Iteration')
+    # plt.ylabel('Loss')
+    # plt.show()
 
     return weights1, biases1, weights2, biases2
 
-weights1, biases1, weights2, biases2 = gradient_descent(X, y, 50, 5)
+dense1.weights, dense1.biases, dense2.weights, dense2.biases = gradient_descent(X, y, 50, 5)
