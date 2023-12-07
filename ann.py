@@ -50,6 +50,8 @@ def update_params_adam(weights, biases, dweights, dbiases, m_w, v_w, m_b, v_b, t
     # v_w = (beta2 * v_w).T + (1 - beta2) * (dweights ** 2)
     m_b = beta1 * m_b + (1 - beta1) * dbiases
     v_b = beta2 * v_b + (1 - beta2) * (dbiases ** 2)
+    
+    
 
     # weights -= alpha * m_w / (np.sqrt(v_w) + epsilon)
     biases -= alpha * m_b / (np.sqrt(v_b) + epsilon)
