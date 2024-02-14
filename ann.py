@@ -123,11 +123,11 @@ def gradient_descent(X, y, iterations, alpha):
         loss_history.append(loss)
         
     #Results
-    # plt.plot(loss_history)
-    # plt.title('Loss over iterations')
-    # plt.xlabel('Iteration')
-    # plt.ylabel('Loss')
-    # plt.show()
+    plt.plot(loss_history)
+    plt.title('Loss over iterations')
+    plt.xlabel('Iteration')
+    plt.ylabel('Loss')
+    plt.show()
 
     return weights1, biases1, weights2, biases2, np.argmax(activation2.output, axis=1)
 
