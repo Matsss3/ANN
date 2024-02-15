@@ -37,11 +37,34 @@ class Activation_SoftMax:
         exp_values = np.exp(inputs - np.max(inputs, axis=1, keepdims=True))
         self.output = exp_values / np.sum(exp_values, axis=1, keepdims=True)
         
+class Loss:
+    def calc(self, output, y):
+        sample_losses = self.forward(output, y)
+        data_loss = np.mean(sample_losses)
+        return data_loss
+    
+class Loss_CCE(Loss):
+    def forward(self, y_hat, y):
+        samples = len(y_hat)
+        y_hat_clipped = np.clip(y_hat, 1e-7, 1 - 1e-7)
+        
+        #Check for categorical labels
+        if len(y.shape) == 1:
+            correct_confidences = y_hat_clipped[range(samples), y]
+        #Check for one-hot coded labels
+        elif len(y.shape) == 2:
+            correct_confidences = np.sum(y_hat_clipped * y, axis=1)
+        
+        loss = -np.log(correct_confidences)
+        return loss
+        
 dl1 = Layer_Dense(2, 3)
 act1 = Activation_ReLU()
 
 dl2 = Layer_Dense(3, 3)
 act2 = Activation_SoftMax()
+
+loss_func = Loss_CCE()
 
 dl1.forward(X)
 act1.forward(dl1.output)
@@ -49,4 +72,14 @@ act1.forward(dl1.output)
 dl2.forward(act1.output)
 act2.forward(dl2.output)
 
+loss = loss_func.calc(act2.output, y)
+predictions = np.argmax(act2.output, axis=1)
+
+if len(y) == 2:
+    y = np.argmax(y, axis=1)
+
+accuracy = np.mean(predictions == y)
+
 print(act2.output[:5])
+print("Loss: ", loss)
+print("Accuracy: ", accuracy)
