@@ -27,10 +27,20 @@ class Layer_Dense:
     
     def forward(self, inputs):
         self.output = np.dot(inputs, self.weights) + self.biases
+        self.inputs = inputs
         
+    def backward(self, dvalues):
+        self.dweights = np.dot(self.inputs.T, dvalues)
+        self.dbiases = np.sum(dvalues, axis=0, keepdims=True)
+        self.dinputs = np.dot(dvalues, self.weights.T)
 class Activation_ReLU:
     def forward(self, inputs):
+        self.inputs = inputs
         self.output = np.maximum(0, inputs)
+        
+    def backward(self, dvalues):
+        self.dinputs = dvalues.copy()
+        self.dinputs[self.inputs <= 0] = 0
         
 class Activation_SoftMax:
     def forward(self, inputs):
@@ -57,6 +67,16 @@ class Loss_CCE(Loss):
         
         loss = -np.log(correct_confidences)
         return loss
+    
+    def backward(self, dvalues, y):
+        samples = len(dvalues)
+        labels = len(dvalues[0])
+
+        if len(y.shape) == 1:
+            y = np.eye(labels)[y]
+
+        self.dinputs = -y / dvalues
+        self.dinputs = self.dinputs / samples
         
 dl1 = Layer_Dense(2, 3)
 act1 = Activation_ReLU()
