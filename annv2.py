@@ -109,37 +109,64 @@ class Loss_Softmax:
         self.dinputs[range(samples), y] -= 1
         self.dinputs = self.dinputs / samples
 
+class Stochastic_GD:
+    def __init__(self, learning_rate=1.0, decay=0.):
+        self.learning_rate = learning_rate
+        self.current_lr = learning_rate
+        self.decay = decay
+        self.iterations = 0
+     
+    def update_params(self, layer):
+        layer.weights += -self.learning_rate * layer.dweights
+        layer.biases += -self.learning_rate * layer.biases
         
-dl1 = Layer_Dense(2, 3)
+    def post_updating(self):
+        if self.decay:
+            self.current_lr = self.learning_rate * (1. / (1. + self.decay * self.iterations))
+        self.iterations += 1
+
+        
+dl1 = Layer_Dense(2, 64)
 act1 = Activation_ReLU()
 
-dl2 = Layer_Dense(3, 3)
+dl2 = Layer_Dense(64, 3)
 loss_soft = Loss_Softmax()
 
-dl1.forward(X)
-act1.forward(dl1.output)
+optimizer = Stochastic_GD(learning_rate=.4, decay=1e-3)
 
-dl2.forward(act1.output)
-loss = loss_soft.forward(dl2.output, y)
+loss_history = []
 
-predictions = np.argmax(loss_soft.output, axis=1)
+for epoch in range(1001):
+    dl1.forward(X)
+    act1.forward(dl1.output)
 
-if len(y) == 2:
-    y = np.argmax(y, axis=1)
+    dl2.forward(act1.output)
+    loss = loss_soft.forward(dl2.output, y)
 
-accuracy = np.mean(predictions == y)
+    predictions = np.argmax(loss_soft.output, axis=1)
 
-print(loss_soft.output[:5])
-print("Loss: ", loss)
-print("Accuracy: ", accuracy)
+    if len(y) == 2:
+        y = np.argmax(y, axis=1)
 
-loss_soft.backward(loss_soft.output, y)
-dl2.backward(loss_soft.dinputs)
+    accuracy = np.mean(predictions == y)
+    
+    if not epoch % 50:
+        print(f'epoch: {epoch}\nacc: {accuracy:.3f}\nloss: {loss:.3f}\n')
 
-act1.backward(dl2.dinputs)
-dl1.backward(act1.dinputs)
+    loss_soft.backward(loss_soft.output, y)
+    dl2.backward(loss_soft.dinputs)
 
-print("DL1 weights: ", dl1.weights)
-print("DL2 weights: ", dl2.weights)
-print("DL1 biases: ", dl1.biases)
-print("DL2 biases: ", dl2.biases)
+    act1.backward(dl2.dinputs)
+    dl1.backward(act1.dinputs)
+
+    optimizer.update_params(dl1)
+    optimizer.update_params(dl2)
+    optimizer.post_updating()
+    
+    loss_history.append(loss)
+    
+plt.plot(loss_history)
+plt.title('Loss over iterations')
+plt.xlabel('Iteration')
+plt.ylabel('Loss')
+plt.show()
