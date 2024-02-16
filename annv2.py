@@ -33,6 +33,7 @@ class Layer_Dense:
         self.dweights = np.dot(self.inputs.T, dvalues)
         self.dbiases = np.sum(dvalues, axis=0, keepdims=True)
         self.dinputs = np.dot(dvalues, self.weights.T)
+        
 class Activation_ReLU:
     def forward(self, inputs):
         self.inputs = inputs
@@ -46,6 +47,16 @@ class Activation_SoftMax:
     def forward(self, inputs):
         exp_values = np.exp(inputs - np.max(inputs, axis=1, keepdims=True))
         self.output = exp_values / np.sum(exp_values, axis=1, keepdims=True)
+        
+    def backward(self, dvalues):
+        self.dinputs = np.empty_like(dvalues)
+        
+        for i, (single_output, single_dvalues) in enumerate(zip(self.output, dvalues)):
+            single_output = single_output.reshape(-1, 1)
+            
+            jacobian_matrix = np.diagflat(single_output) - np.dot(single_output, single_output.T)
+            
+            self.dinputs[i] = np.dot(jacobian_matrix, single_dvalues)
         
 class Loss:
     def calc(self, output, y):
@@ -78,28 +89,57 @@ class Loss_CCE(Loss):
         self.dinputs = -y / dvalues
         self.dinputs = self.dinputs / samples
         
+class Loss_Softmax:
+    def __init__(self):
+        self.activation = Activation_SoftMax()
+        self.loss = Loss_CCE()
+        
+    def forward(self, inputs, y):
+        self.activation.forward(inputs)
+        self.output = self.activation.output
+        return self.loss.calc(self.output, y)
+    
+    def backward(self, dvalues, y):
+        samples = len(dvalues)
+    
+        if len(y.shape) == 2:
+            y = np.argmax(y, axis=1)
+        
+        self.dinputs = dvalues.copy()
+        self.dinputs[range(samples), y] -= 1
+        self.dinputs = self.dinputs / samples
+
+        
 dl1 = Layer_Dense(2, 3)
 act1 = Activation_ReLU()
 
 dl2 = Layer_Dense(3, 3)
-act2 = Activation_SoftMax()
-
-loss_func = Loss_CCE()
+loss_soft = Loss_Softmax()
 
 dl1.forward(X)
 act1.forward(dl1.output)
 
 dl2.forward(act1.output)
-act2.forward(dl2.output)
+loss = loss_soft.forward(dl2.output, y)
 
-loss = loss_func.calc(act2.output, y)
-predictions = np.argmax(act2.output, axis=1)
+predictions = np.argmax(loss_soft.output, axis=1)
 
 if len(y) == 2:
     y = np.argmax(y, axis=1)
 
 accuracy = np.mean(predictions == y)
 
-print(act2.output[:5])
+print(loss_soft.output[:5])
 print("Loss: ", loss)
 print("Accuracy: ", accuracy)
+
+loss_soft.backward(loss_soft.output, y)
+dl2.backward(loss_soft.dinputs)
+
+act1.backward(dl2.dinputs)
+dl1.backward(act1.dinputs)
+
+print("DL1 weights: ", dl1.weights)
+print("DL2 weights: ", dl2.weights)
+print("DL1 biases: ", dl1.biases)
+print("DL2 biases: ", dl2.biases)
