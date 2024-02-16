@@ -109,16 +109,32 @@ class Loss_Softmax:
         self.dinputs[range(samples), y] -= 1
         self.dinputs = self.dinputs / samples
 
+#Stochastic Gradient Descent Optimizer
 class Stochastic_GD:
-    def __init__(self, learning_rate=1.0, decay=0.):
+    def __init__(self, learning_rate=1.0, decay=0., momentum=0.):
         self.learning_rate = learning_rate
         self.current_lr = learning_rate
         self.decay = decay
         self.iterations = 0
+        self.momentum = momentum
      
     def update_params(self, layer):
-        layer.weights += -self.learning_rate * layer.dweights
-        layer.biases += -self.learning_rate * layer.biases
+        if self.momentum:
+            if not hasattr(layer, 'weight_momentums'):
+                layer.weight_momentums = np.zeros_like(layer.weights)
+                layer.bias_momentums = np.zeros_like(layer.biases)
+            
+            weight_updates = self.momentum * layer.weight_momentums - self.current_lr * layer.dweights
+            layer.weight_momentums = weight_updates
+
+            bias_updates = self.momentum * layer.bias_momentums - self.current_lr * layer.dbiases
+            layer.bias_momentums = bias_updates
+        else:        
+            layer.weights += -self.learning_rate * layer.dweights
+            layer.biases += -self.learning_rate * layer.biases
+            
+        layer.weights += weight_updates
+        layer.biases += bias_updates
         
     def post_updating(self):
         if self.decay:
@@ -132,7 +148,7 @@ act1 = Activation_ReLU()
 dl2 = Layer_Dense(64, 3)
 loss_soft = Loss_Softmax()
 
-optimizer = Stochastic_GD(learning_rate=.4, decay=1e-3)
+optimizer = Stochastic_GD(learning_rate=1., decay=1e-3, momentum=0.)
 
 loss_history = []
 

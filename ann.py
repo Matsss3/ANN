@@ -14,7 +14,7 @@ def spiral_data(points, classes):
         y[ix] = class_number
     return X, y
 
-X, y = spiral_data(100, 2)
+X, y = spiral_data(100, 3)
 
 X = (X - X.mean()) / X.std()
 
@@ -92,7 +92,7 @@ class Loss_CategoricalCrossentropy(Loss):
 dense1 = Layer_Dense(2, 6)
 activation1 = Activation_ReLU()
 
-dense2 = Layer_Dense(6, 2)
+dense2 = Layer_Dense(6, 3)
 activation2 = Activation_Softmax()
 
 def gradient_descent(X, y, iterations, alpha):
