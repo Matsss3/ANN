@@ -21,9 +21,13 @@ X, y = spiral_data(100, 3)
 # plt.show()
 
 class Layer_Dense:
-    def __init__(self, n_inputs, n_neurons):
+    def __init__(self, n_inputs, n_neurons, w_regl1=0, w_regl2=0, b_regl1=0, b_regl2=0):
         self.weights = 0.01 * np.random.randn(n_inputs, n_neurons)
         self.biases = np.zeros((1, n_neurons))
+        self.w_regl1 = w_regl1
+        self.w_regl2 = w_regl2
+        self.b_regl1 = b_regl1
+        self.b_regl2 = b_regl2
     
     def forward(self, inputs):
         self.output = np.dot(inputs, self.weights) + self.biases
@@ -33,6 +37,22 @@ class Layer_Dense:
         self.dweights = np.dot(self.inputs.T, dvalues)
         self.dbiases = np.sum(dvalues, axis=0, keepdims=True)
         self.dinputs = np.dot(dvalues, self.weights.T)
+        
+        if self.w_regl1 > 0:
+            dL1 = np.ones_like(self.weights)
+            dL1[self.weights < 0] = -1
+            self.dweights += self.w_regl1 * dL1
+            
+        if self.w_regl2 > 0:
+            self.dweights += 2 * self.w_regl2 * self.weights
+            
+        if self.b_regl1 > 0:
+            dL1 = np.ones_like(self.biases)
+            dL1[self.biases < 0] = -1
+            self.dbiases += self.b_regl1 * dL1
+            
+        if self.b_regl2 > 0:
+            self.dbiases += 2 * self.b_regl2 * self.biases
         
 class Activation_ReLU:
     def forward(self, inputs):
@@ -64,6 +84,23 @@ class Loss:
         data_loss = np.mean(sample_losses)
         return data_loss
     
+    def regularization_loss(self, layer):
+        reg_loss = 0
+        
+        if layer.w_regl1 > 0:
+            reg_loss += layer.w_regl1 * np.sum(np.abs(layer.weights))
+            
+        if layer.w_regl2 > 0:
+            reg_loss += layer.w_regl2 * np.sum(layer.weights**2)
+
+        if layer.b_regl1 > 0:
+            reg_loss += layer.b_regl1 * np.sum(np.abs(layer.biases))
+            
+        if layer.b_regl2 > 0:
+            reg_loss += layer.b_regl2 * np.sum(layer.biases**2)
+            
+        return reg_loss
+    
 class Loss_CCE(Loss):
     def forward(self, y_hat, y):
         samples = len(y_hat)
@@ -89,7 +126,7 @@ class Loss_CCE(Loss):
         self.dinputs = -y / dvalues
         self.dinputs = self.dinputs / samples
         
-class Loss_Softmax:
+class Loss_Softmax(Loss):
     def __init__(self):
         self.activation = Activation_SoftMax()
         self.loss = Loss_CCE()
@@ -231,7 +268,7 @@ class Adam:
         self.iterations += 1
 
         
-dl1 = Layer_Dense(2, 64)
+dl1 = Layer_Dense(2, 64, w_regl2=5e-4, b_regl2=5e-4)
 act1 = Activation_ReLU()
 
 dl2 = Layer_Dense(64, 3)
@@ -244,12 +281,12 @@ optimizer = Adam(learning_rate=0.1, decay=5e-7)
 
 loss_history = []
 
-for epoch in range(5001):
+for epoch in range(1001):
     dl1.forward(X)
     act1.forward(dl1.output)
 
     dl2.forward(act1.output)
-    loss = loss_soft.forward(dl2.output, y)
+    data_loss = loss_soft.forward(dl2.output, y)
 
     predictions = np.argmax(loss_soft.output, axis=1)
 
@@ -258,8 +295,11 @@ for epoch in range(5001):
 
     accuracy = np.mean(predictions == y)
     
+    reg_loss = loss_soft.regularization_loss(dl1) + loss_soft.regularization_loss(dl2)
+    loss = data_loss + reg_loss
+    
     if not epoch % 100:
-        print(f'epoch: {epoch}\nacc: {accuracy:.3f}\nloss: {loss:.3f}\n')
+        print(f'epoch: {epoch}\nacc: {accuracy:.3f}\nloss: {loss:.3f}\ndata loss: {data_loss:.3f}\n')
 
     loss_soft.backward(loss_soft.output, y)
     dl2.backward(loss_soft.dinputs)
