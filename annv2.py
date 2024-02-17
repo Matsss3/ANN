@@ -14,7 +14,7 @@ def spiral_data(points, classes):
         y[ix] = class_number
     return X, y
 
-X, y = spiral_data(100, 3)
+X, y = spiral_data(250, 3)
 
 # Show spiral data structure
 # plt.scatter(X[:,0], X[:,1], c=y, cmap='brg')
@@ -314,7 +314,20 @@ for epoch in range(1001):
     loss_history.append(loss)
     
 plt.plot(loss_history)
-plt.title('Loss over iterations')
+plt.title('Loss over training')
 plt.xlabel('Iteration')
 plt.ylabel('Loss')
 plt.show()
+
+X_test, y_test = spiral_data(50, 3)
+
+dl1.forward(X_test)
+act1.forward(dl1.output)
+dl2.forward(act1.output)
+loss = loss_soft.forward(dl2.output, y_test)
+predictions = np.argmax(loss_soft.output, axis=1)
+if len(y_test) == 2:
+    y_test = np.argmax(y_test, axis=1)
+accuracy = np.mean(predictions == y_test)
+print("\n\nTESTING RESULTS:")
+print(f'validation, acc: {accuracy:.3f}, loss: {loss:.3f}')
