@@ -14,7 +14,8 @@ def spiral_data(points, classes):
         y[ix] = class_number
     return X, y
 
-X, y = spiral_data(250, 3)
+X, y = spiral_data(250, 2)
+y = y.reshape(-1, 1)
 
 # Show spiral data structure
 # plt.scatter(X[:,0], X[:,1], c=y, cmap='brg')
@@ -54,6 +55,7 @@ class Layer_Dense:
         if self.b_regl2 > 0:
             self.dbiases += 2 * self.b_regl2 * self.biases
         
+# Rectilinear Activation Function
 class Activation_ReLU:
     def forward(self, inputs):
         self.inputs = inputs
@@ -63,6 +65,7 @@ class Activation_ReLU:
         self.dinputs = dvalues.copy()
         self.dinputs[self.inputs <= 0] = 0
         
+#Softmax Activation Function
 class Activation_SoftMax:
     def forward(self, inputs):
         exp_values = np.exp(inputs - np.max(inputs, axis=1, keepdims=True))
@@ -77,6 +80,15 @@ class Activation_SoftMax:
             jacobian_matrix = np.diagflat(single_output) - np.dot(single_output, single_output.T)
             
             self.dinputs[i] = np.dot(jacobian_matrix, single_dvalues)
+        
+#Sigmoid Activation Function
+class Activation_Sigmoid:
+    def forward(self, inputs):
+        self.inputs = inputs
+        self.output = 1 / (1 + np.exp(-inputs))
+        
+    def backward(self, dvalues):
+        self.dinputs = dvalues * (1 - self.output) * self.output
         
 class Loss:
     def calc(self, output, y):
@@ -101,6 +113,7 @@ class Loss:
             
         return reg_loss
     
+#Categorical Crossentropy Loss Function
 class Loss_CCE(Loss):
     def forward(self, y_hat, y):
         samples = len(y_hat)
@@ -126,6 +139,7 @@ class Loss_CCE(Loss):
         self.dinputs = -y / dvalues
         self.dinputs = self.dinputs / samples
         
+#Softmax-based Loss Function
 class Loss_Softmax(Loss):
     def __init__(self):
         self.activation = Activation_SoftMax()
@@ -144,6 +158,25 @@ class Loss_Softmax(Loss):
         
         self.dinputs = dvalues.copy()
         self.dinputs[range(samples), y] -= 1
+        self.dinputs = self.dinputs / samples
+        
+#Binary Categorical Crossentropy loss Function
+class Loss_BCCE(Loss):
+    def forward(self, y_hat, y):
+        y_hat_clipped = np.clip(y_hat, 1e-7, 1 - 1e-7)
+        
+        sample_losses = -(y * np.log(y_hat_clipped) + (1 - y) * np.log(1 - y_hat_clipped))
+        sample_losses = np.mean(sample_losses, axis=-1)
+        
+        return sample_losses
+    
+    def backward(self, dvalues, y):
+        samples = len(dvalues)
+        outputs = len(dvalues[0])
+        
+        clipped_dvalues = np.clip(dvalues, 1e-7, 1 - 1e-7)
+        
+        self.dinputs = -(y / clipped_dvalues - (1 - y) / (1 - clipped_dvalues)) / outputs
         self.dinputs = self.dinputs / samples
 
 #Stochastic Gradient Descent Optimizer
@@ -271,39 +304,40 @@ class Adam:
 dl1 = Layer_Dense(2, 64, w_regl2=5e-4, b_regl2=5e-4)
 act1 = Activation_ReLU()
 
-dl2 = Layer_Dense(64, 3)
-loss_soft = Loss_Softmax()
+dl2 = Layer_Dense(64, 1)
+act2 = Activation_Sigmoid()
+loss_act = Loss_BCCE()
 
 # optimizer = Stochastic_GD(learning_rate=1., decay=1e-3, momentum=0.9)
 # optimizer = AdaGrad(learning_rate=1., decay=1e-3)
 # optimizer = RMSProp(learning_rate=0.02, decay=1e-5, rho=0.999)
-optimizer = Adam(learning_rate=0.1, decay=5e-7)
+optimizer = Adam(learning_rate=0.05, decay=5e-7)
 
 loss_history = []
 
-for epoch in range(1001):
+for epoch in range(5001):
     dl1.forward(X)
     act1.forward(dl1.output)
 
     dl2.forward(act1.output)
-    data_loss = loss_soft.forward(dl2.output, y)
+    act2.forward(dl2.output)
+    
+    data_loss = loss_act.calc(act2.output, y)
 
-    predictions = np.argmax(loss_soft.output, axis=1)
-
-    if len(y) == 2:
-        y = np.argmax(y, axis=1)
-
+    predictions = (act2.output > 0.5) * 1
     accuracy = np.mean(predictions == y)
     
-    reg_loss = loss_soft.regularization_loss(dl1) + loss_soft.regularization_loss(dl2)
+    reg_loss = loss_act.regularization_loss(dl1) + loss_act.regularization_loss(dl2)
     loss = data_loss + reg_loss
     
     if not epoch % 100:
         print(f'epoch: {epoch}\nacc: {accuracy:.3f}\nloss: {loss:.3f}\ndata loss: {data_loss:.3f}\n')
 
-    loss_soft.backward(loss_soft.output, y)
-    dl2.backward(loss_soft.dinputs)
-
+    loss_act.backward(act2.output, y)
+    
+    act2.backward(loss_act.dinputs)
+    dl2.backward(act2.dinputs)
+    
     act1.backward(dl2.dinputs)
     dl1.backward(act1.dinputs)
 
@@ -319,15 +353,15 @@ plt.xlabel('Iteration')
 plt.ylabel('Loss')
 plt.show()
 
-X_test, y_test = spiral_data(50, 3)
+X_test, y_test = spiral_data(50, 2)
+y_test = y_test.reshape(-1, 1)
 
 dl1.forward(X_test)
 act1.forward(dl1.output)
 dl2.forward(act1.output)
-loss = loss_soft.forward(dl2.output, y_test)
-predictions = np.argmax(loss_soft.output, axis=1)
-if len(y_test) == 2:
-    y_test = np.argmax(y_test, axis=1)
+act2.forward(dl2.output)
+loss = loss_act.calc(act2.output, y_test)
+predictions = (act2.output > 0.5) * 1
 accuracy = np.mean(predictions == y_test)
-print("\n\nTESTING RESULTS:")
+print("d\nTESTING RESULTS:")
 print(f'validation, acc: {accuracy:.3f}, loss: {loss:.3f}')
