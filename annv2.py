@@ -5,55 +5,52 @@ import cv2
 
 # np.random.seed(0)
 
-def spiral_data(points, classes):
-    X = np.zeros((points*classes, 2))
-    y = np.zeros(points*classes, dtype='uint8')
-    for class_number in range(classes):
-        ix = range(points*class_number, points*(class_number+1))
-        r = np.linspace(0.0, 1, points)  # radius
-        t = np.linspace(class_number*4, (class_number+1)*4, points) + np.random.randn(points)*0.2
-        X[ix] = np.c_[r*np.sin(t*2.5), r*np.cos(t*2.5)]
-        y[ix] = class_number
-    return X, y
+# def spiral_data(points, classes):
+#     X = np.zeros((points*classes, 2))
+#     y = np.zeros(points*classes, dtype='uint8')
+#     for class_number in range(classes):
+#         ix = range(points*class_number, points*(class_number+1))
+#         r = np.linspace(0.0, 1, points)  # radius
+#         t = np.linspace(class_number*4, (class_number+1)*4, points) + np.random.randn(points)*0.2
+#         X[ix] = np.c_[r*np.sin(t*2.5), r*np.cos(t*2.5)]
+#         y[ix] = class_number
+#     return X, y
 
-X, y = spiral_data(250, 2)
-y = y.reshape(-1, 1)
+# X, y = spiral_data(250, 2)
+# y = y.reshape(-1, 1)
 
 # Show spiral data structure
 # plt.scatter(X[:,0], X[:,1], c=y, cmap='brg')
 # plt.show()
 
-# def load_mnist_dataset(dataset, path):
-#     labels = os.listdir(os.path.join(path, dataset))
+def load_mnist_dataset(dataset, path):
+    labels = os.listdir(os.path.join(path, dataset))
     
-#     X = []
-#     y = []
+    X = []
+    y = []
     
-#     for label in labels:
-#         for file in os.listdir(os.path.join(path, dataset, label)):
-#             image = cv2.imread(os.path.join(path, dataset, label, file), cv2.IMREAD_UNCHANGED)
+    for label in labels:
+        for file in os.listdir(os.path.join(path, dataset, label)):
+            image = cv2.imread(os.path.join(path, dataset, label, file), cv2.IMREAD_UNCHANGED)
             
-#             X.append(image)
-#             y.append(label)
+            X.append(image)
+            y.append(label)
             
-#     return np.array(X), np.array(y).astype('uint8')
+    return np.array(X), np.array(y).astype('uint8')
 
-# def create_data_mnist(path):
-#     X, y = load_mnist_dataset('train', path)
-#     X_test, y_test = load_mnist_dataset('test', path)
+def create_data_mnist(path):
+    X, y = load_mnist_dataset('train', path)
+    X_test, y_test = load_mnist_dataset('test', path)
     
-#     return X, y, X_test, y_test
+    return X, y, X_test, y_test
 
-# X, y, X_test, y_test = create_data_mnist('fashion_mnist_images')
+X, y, X_test, y_test = create_data_mnist('fashion_mnist_images')
 
-# X = (X.astype(np.float32) - 127.5) / 127.5
-# X_test = (X_test.astype(np.float32) - 127.5) / 127.5
+X = (X.reshape(X.shape[0], -1).astype(np.float32) - 127.5) / 127.5
+X_test = (X_test.reshape(X_test.shape[0], -1).astype(np.float32) - 127.5) / 127.5
 
-# X = X.reshape(X.shape[0], -1)
-# X_test = X_test.reshape(X_test.shape[0], -1)
-
-# keys = np.array(range(X.shape[0]))
-# np.random.shuffle(keys)
+keys = np.array(range(X.shape[0]))
+np.random.shuffle(keys)
 
 class Layer_Dense:
     def __init__(self, n_inputs, n_neurons, w_regl1=0, w_regl2=0, b_regl1=0, b_regl2=0):
@@ -347,12 +344,12 @@ class Adam:
         self.iterations += 1
 
         
-dense_layer_1 = Layer_Dense(2, 64, w_regl2=5e-4, b_regl2=5e-4)
+dense_layer_1 = Layer_Dense(X.shape[1], 64, w_regl2=5e-4, b_regl2=5e-4)
 activation_1 = Activation_ReLU()
 
-dense_layer_2 = Layer_Dense(64, 1)
-activation_2 = Activation_Sigmoid()
-loss_activation = Loss_BCCE()
+dense_layer_2 = Layer_Dense(64, 10)
+activation_2 = Activation_SoftMax()
+loss_activation = Loss_CCE()
 
 # optimizer = Stochastic_GD(learning_rate=1., decay=1e-3, momentum=0.9)
 # optimizer = AdaGrad(learning_rate=1., decay=1e-3)
@@ -387,7 +384,9 @@ def train(X, y, dl1, dl2, act1, act2, loss_act, optimizer, epochs=1, batch_size=
         
         data_loss = loss_act.calc(act2.output, batch_y)
 
-        predictions = (act2.output > 0.5) * 1
+        predictions = np.argmax(act2.output, axis=1)
+        if len(batch_y) == 2:
+            batch_y = np.argmax(batch_y, axis=1)
         accuracy = np.mean(predictions == batch_y)
         
         reg_loss = loss_act.regularization_loss(dl1) + loss_act.regularization_loss(dl2)
@@ -406,7 +405,7 @@ def train(X, y, dl1, dl2, act1, act2, loss_act, optimizer, epochs=1, batch_size=
         optimizer.post_updating()
         
         if not epoch % print_every or epoch == train_steps -1:
-            print(f'epoch: {epoch}\nacc: {accuracy:.3f}\nloss: {loss:.3f}\n')
+            print(f'epoch: {epoch}\nacc: {accuracy:.3f}\n')
             
         loss_history.append(loss)
         
@@ -416,7 +415,7 @@ def train(X, y, dl1, dl2, act1, act2, loss_act, optimizer, epochs=1, batch_size=
     plt.ylabel('Loss')
     plt.show()
         
-train(X, y, dense_layer_1, dense_layer_2, activation_1, activation_2, loss_activation, optimizer, epochs=1000, batch_size=10, print_every=100)
+train(X, y, dense_layer_1, dense_layer_2, activation_1, activation_2, loss_activation, optimizer, epochs=500, batch_size=10, print_every=50)
 # X_test, y_test = spiral_data(50, 2)
 # y_test = y_test.reshape(-1, 1)
 
