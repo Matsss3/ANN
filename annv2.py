@@ -363,5 +363,6 @@ act2.forward(dl2.output)
 loss = loss_act.calc(act2.output, y_test)
 predictions = (act2.output > 0.5) * 1
 accuracy = np.mean(predictions == y_test)
-print("d\nTESTING RESULTS:")
+
+print("\nTESTING RESULTS:")
 print(f'validation, acc: {accuracy:.3f}, loss: {loss:.3f}')
