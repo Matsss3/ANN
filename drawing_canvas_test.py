@@ -1,6 +1,9 @@
 import tkinter as tk
 from tkinter import Canvas, Button
 from PIL import Image, ImageDraw
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
 
 class Drawing_Panel:
     def __init__(self, master):
@@ -22,22 +25,29 @@ class Drawing_Panel:
         
     def paint(self, event):
         x, y = event.x, event.y
-        
-        r = 3
-        
+        r = 3  
         self.canvas.create_oval(x - r, y - r, x + r, y + r, fill="black")
         self.draw.ellipse([x - r, y - r, x + r, y + r], fill="black")
-        
-        if self.old_x and self.old_y:
-            self.canvas.create_line(self.old_x, self.old_y, x, y, fill='black', width=2)
-            
-        self.old_x = x
-        self.old_y = y
         
     def save_img(self):
         temp_path = 'temp.png'
         self.image.save(temp_path)
-        
-root = tk.Tk()
-app = Drawing_Panel(root)
-root.mainloop()
+        print(f'Updating image at: {temp_path}')
+
+def main_drawing():
+    root = tk.Tk()
+    app = Drawing_Panel(root)
+    root.mainloop()
+    
+main_drawing()
+
+def pre_process_image(URL):
+    image_data = cv2.imread(URL, cv2.IMREAD_GRAYSCALE)
+    image_data = cv2.resize(image_data, (28, 28))
+    image_data = 255 - image_data
+    image_data = (image_data.reshape(1, -1).astype(np.float32) - 127.5) / 127.5
+    
+    return image_data
+    
+final_img = pre_process_image('temp.png')
+print(final_img)
