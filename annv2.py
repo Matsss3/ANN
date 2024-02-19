@@ -2,6 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import cv2
+import tkinter as tk
+from tkinter import Canvas, Button
+from PIL import Image, ImageDraw
 
 # np.random.seed(0)
 
@@ -55,8 +58,8 @@ np.random.shuffle(keys)
 X = X[keys]
 y = y[keys]
 
-X = X[:30000]
-y = y[:30000]
+# X = X[:15000]
+# y = y[:15000]
 
 class Layer_Dense:
     def __init__(self, n_inputs, n_neurons, w_regl1=0, w_regl2=0, b_regl1=0, b_regl2=0):
@@ -348,7 +351,48 @@ class Adam:
         if self.decay:
             self.current_lr = self.learning_rate * (1. / (1. + self.decay * self.iterations))
         self.iterations += 1
-
+        
+class Drawing_Panel:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("Drawing Panel")
+        
+        self.canvas = Canvas(self.master, width=400, height=400, bg='white')
+        self.canvas.pack(fill=tk.BOTH, expand=True)
+        
+        self.save_button = Button(self.master, text="Save", command=self.save_img)
+        self.save_button.pack(side=tk.BOTTOM)
+        
+        self.old_x = None
+        self.old_y = None
+        self.canvas.bind("<B1-Motion>", self.paint)
+        
+        self.image = Image.new("RGB", (400, 400), "white")
+        self.draw = ImageDraw.Draw(self.image)
+        
+    def paint(self, event):
+        x, y = event.x, event.y
+        r = 5  
+        self.canvas.create_oval(x - r, y - r, x + r, y + r, fill="black")
+        self.draw.ellipse([x - r, y - r, x + r, y + r], fill="black")
+        
+    def save_img(self):
+        temp_path = 'temp.png'
+        self.image.save(temp_path)
+        print(f'Updating image at: {temp_path}')
+        
+def main_drawing():
+    root = tk.Tk()
+    app = Drawing_Panel(root)
+    root.mainloop()
+    
+def pre_process_image(URL):
+    image_data = cv2.imread(URL, cv2.IMREAD_GRAYSCALE)
+    image_data = cv2.resize(image_data, (28, 28))
+    image_data = 255 - image_data
+    image_data = (image_data.reshape(1, -1).astype(np.float32) - 127.5) / 127.5
+    
+    return image_data
         
 dense_layer_1 = Layer_Dense(X.shape[1], 64, w_regl2=5e-4, b_regl2=5e-4)
 activation_1 = Activation_ReLU()
@@ -374,7 +418,7 @@ def train(X, y, dl1, dl2, act1, act2, loss_act, optimizer, epochs=1, batch_size=
 
     loss_act.new_pass()
     
-    for epoch in range(epochs):
+    for epoch in range(epochs+1):
         if batch_size is not None:
             batch_X = X
             batch_y = y
@@ -421,18 +465,42 @@ def train(X, y, dl1, dl2, act1, act2, loss_act, optimizer, epochs=1, batch_size=
     plt.ylabel('Loss')
     plt.show()
         
-train(X, y, dense_layer_1, dense_layer_2, activation_1, activation_2, loss_activation, optimizer, epochs=501, batch_size=10, print_every=50)
+train(X, y, dense_layer_1, dense_layer_2, activation_1, activation_2, loss_activation, optimizer, epochs=250, batch_size=10, print_every=50)
 
-# X_test, y_test = spiral_data(50, 2)
-# y_test = y_test.reshape(-1, 1)
+fashion_mnist_labels = {
+    0: 'Remera',
+    1: 'Pantalon',
+    2: 'Pullover',
+    3: 'Vestido',
+    4: 'Campera',
+    5: 'Sandalia',
+    6: 'Camisa',
+    7: 'Zapatilla',
+    8: 'Bolso',
+    9: 'Bota'
+}
 
-# dl1.forward(X_test)
-# act1.forward(dl1.output)
-# dl2.forward(act1.output)
-# act2.forward(dl2.output)
-# loss = loss_act.calc(act2.output, y_test)
-# predictions = (act2.output > 0.5) * 1
-# accuracy = np.mean(predictions == y_test)
+while True:
+    opt = input("Seguir? (Y,N): ")
+    
+    if opt.lower() != 'y':
+        break
+    
+    #Open Drawing Panel
+    main_drawing()
 
-# print("\nTESTING RESULTS:")
-# print(f'validation, acc: {accuracy:.3f}, loss: {loss:.3f}')
+    #Preprocess Image
+    final_img = pre_process_image('temp.png')
+
+    dense_layer_1.forward(final_img)
+    activation_1.forward(dense_layer_1.output)
+
+    dense_layer_2.forward(activation_1.output)
+    activation_2.forward(dense_layer_2.output)
+
+    output = np.vstack(activation_2.output)
+
+    prediction = np.argmax(output, axis=1)[0]
+    print(prediction)
+
+    print(f'================================\nEsto es: {fashion_mnist_labels[prediction]}')
