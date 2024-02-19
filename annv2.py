@@ -52,6 +52,12 @@ X_test = (X_test.reshape(X_test.shape[0], -1).astype(np.float32) - 127.5) / 127.
 keys = np.array(range(X.shape[0]))
 np.random.shuffle(keys)
 
+X = X[keys]
+y = y[keys]
+
+X = X[:30000]
+y = y[:30000]
+
 class Layer_Dense:
     def __init__(self, n_inputs, n_neurons, w_regl1=0, w_regl2=0, b_regl1=0, b_regl2=0):
         self.weights = 0.01 * np.random.randn(n_inputs, n_neurons)
@@ -354,7 +360,7 @@ loss_activation = Loss_CCE()
 # optimizer = Stochastic_GD(learning_rate=1., decay=1e-3, momentum=0.9)
 # optimizer = AdaGrad(learning_rate=1., decay=1e-3)
 # optimizer = RMSProp(learning_rate=0.02, decay=1e-5, rho=0.999)
-optimizer = Adam(learning_rate=0.05, decay=5e-7)
+optimizer = Adam(learning_rate=0.01, decay=5e-5)
 
 def train(X, y, dl1, dl2, act1, act2, loss_act, optimizer, epochs=1, batch_size=None, print_every=1):
     train_steps = 1
@@ -405,7 +411,7 @@ def train(X, y, dl1, dl2, act1, act2, loss_act, optimizer, epochs=1, batch_size=
         optimizer.post_updating()
         
         if not epoch % print_every or epoch == train_steps -1:
-            print(f'epoch: {epoch}\nacc: {accuracy:.3f}\n')
+            print(f'epoch: {epoch}\nacc: {accuracy:.3f}\nloss: {loss:.3f}\n')
             
         loss_history.append(loss)
         
@@ -415,7 +421,8 @@ def train(X, y, dl1, dl2, act1, act2, loss_act, optimizer, epochs=1, batch_size=
     plt.ylabel('Loss')
     plt.show()
         
-train(X, y, dense_layer_1, dense_layer_2, activation_1, activation_2, loss_activation, optimizer, epochs=500, batch_size=10, print_every=50)
+train(X, y, dense_layer_1, dense_layer_2, activation_1, activation_2, loss_activation, optimizer, epochs=501, batch_size=10, print_every=50)
+
 # X_test, y_test = spiral_data(50, 2)
 # y_test = y_test.reshape(-1, 1)
 
