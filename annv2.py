@@ -1,5 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import os
+import cv2
 
 # np.random.seed(0)
 
@@ -20,6 +22,38 @@ y = y.reshape(-1, 1)
 # Show spiral data structure
 # plt.scatter(X[:,0], X[:,1], c=y, cmap='brg')
 # plt.show()
+
+# def load_mnist_dataset(dataset, path):
+#     labels = os.listdir(os.path.join(path, dataset))
+    
+#     X = []
+#     y = []
+    
+#     for label in labels:
+#         for file in os.listdir(os.path.join(path, dataset, label)):
+#             image = cv2.imread(os.path.join(path, dataset, label, file), cv2.IMREAD_UNCHANGED)
+            
+#             X.append(image)
+#             y.append(label)
+            
+#     return np.array(X), np.array(y).astype('uint8')
+
+# def create_data_mnist(path):
+#     X, y = load_mnist_dataset('train', path)
+#     X_test, y_test = load_mnist_dataset('test', path)
+    
+#     return X, y, X_test, y_test
+
+# X, y, X_test, y_test = create_data_mnist('fashion_mnist_images')
+
+# X = (X.astype(np.float32) - 127.5) / 127.5
+# X_test = (X_test.astype(np.float32) - 127.5) / 127.5
+
+# X = X.reshape(X.shape[0], -1)
+# X_test = X_test.reshape(X_test.shape[0], -1)
+
+# keys = np.array(range(X.shape[0]))
+# np.random.shuffle(keys)
 
 class Layer_Dense:
     def __init__(self, n_inputs, n_neurons, w_regl1=0, w_regl2=0, b_regl1=0, b_regl2=0):
@@ -94,6 +128,14 @@ class Loss:
     def calc(self, output, y):
         sample_losses = self.forward(output, y)
         data_loss = np.mean(sample_losses)
+        
+        self.accumulated_sum += np.sum(sample_losses)
+        self.accumulated_count += len(sample_losses)
+        
+        return data_loss
+    
+    def calc_accumulated(self):
+        data_loss = self.accumulated_sum / self.accumulated_count
         return data_loss
     
     def regularization_loss(self, layer):
@@ -112,6 +154,10 @@ class Loss:
             reg_loss += layer.b_regl2 * np.sum(layer.biases**2)
             
         return reg_loss
+    
+    def new_pass(self):
+        self.accumulated_sum = 0
+        self.accumulated_count = 0
     
 #Categorical Crossentropy Loss Function
 class Loss_CCE(Loss):
@@ -301,68 +347,86 @@ class Adam:
         self.iterations += 1
 
         
-dl1 = Layer_Dense(2, 64, w_regl2=5e-4, b_regl2=5e-4)
-act1 = Activation_ReLU()
+dense_layer_1 = Layer_Dense(2, 64, w_regl2=5e-4, b_regl2=5e-4)
+activation_1 = Activation_ReLU()
 
-dl2 = Layer_Dense(64, 1)
-act2 = Activation_Sigmoid()
-loss_act = Loss_BCCE()
+dense_layer_2 = Layer_Dense(64, 1)
+activation_2 = Activation_Sigmoid()
+loss_activation = Loss_BCCE()
 
 # optimizer = Stochastic_GD(learning_rate=1., decay=1e-3, momentum=0.9)
 # optimizer = AdaGrad(learning_rate=1., decay=1e-3)
 # optimizer = RMSProp(learning_rate=0.02, decay=1e-5, rho=0.999)
 optimizer = Adam(learning_rate=0.05, decay=5e-7)
 
-loss_history = []
+def train(X, y, dl1, dl2, act1, act2, loss_act, optimizer, epochs=1, batch_size=None, print_every=1):
+    train_steps = 1
+    loss_history = []
+        
+    if batch_size is not None:
+        train_steps = len(X) // batch_size
+        
+        if train_steps * batch_size < len(X):
+            train_steps += 1
 
-for epoch in range(5001):
-    dl1.forward(X)
-    act1.forward(dl1.output)
-
-    dl2.forward(act1.output)
-    act2.forward(dl2.output)
+    loss_act.new_pass()
     
-    data_loss = loss_act.calc(act2.output, y)
+    for epoch in range(epochs):
+        if batch_size is not None:
+            batch_X = X
+            batch_y = y
+        else:
+            batch_X = X[epoch*batch_size:(epoch + 1)*batch_size]
+            batch_y = y[epoch*batch_size:(epoch + 1)*batch_size]
+                    
+        dl1.forward(batch_X)
+        act1.forward(dl1.output)
 
-    predictions = (act2.output > 0.5) * 1
-    accuracy = np.mean(predictions == y)
-    
-    reg_loss = loss_act.regularization_loss(dl1) + loss_act.regularization_loss(dl2)
-    loss = data_loss + reg_loss
-    
-    if not epoch % 100:
-        print(f'epoch: {epoch}\nacc: {accuracy:.3f}\nloss: {loss:.3f}\ndata loss: {data_loss:.3f}\n')
+        dl2.forward(act1.output)
+        act2.forward(dl2.output)
+        
+        data_loss = loss_act.calc(act2.output, batch_y)
 
-    loss_act.backward(act2.output, y)
-    
-    act2.backward(loss_act.dinputs)
-    dl2.backward(act2.dinputs)
-    
-    act1.backward(dl2.dinputs)
-    dl1.backward(act1.dinputs)
+        predictions = (act2.output > 0.5) * 1
+        accuracy = np.mean(predictions == batch_y)
+        
+        reg_loss = loss_act.regularization_loss(dl1) + loss_act.regularization_loss(dl2)
+        loss = data_loss + reg_loss 
 
-    optimizer.update_params(dl1)
-    optimizer.update_params(dl2)
-    optimizer.post_updating()
-    
-    loss_history.append(loss)
-    
-plt.plot(loss_history)
-plt.title('Loss over training')
-plt.xlabel('Iteration')
-plt.ylabel('Loss')
-plt.show()
+        loss_act.backward(act2.output, batch_y)
+        
+        act2.backward(loss_act.dinputs)
+        dl2.backward(act2.dinputs)
+        
+        act1.backward(dl2.dinputs)
+        dl1.backward(act1.dinputs)
 
-X_test, y_test = spiral_data(50, 2)
-y_test = y_test.reshape(-1, 1)
+        optimizer.update_params(dl1)
+        optimizer.update_params(dl2)
+        optimizer.post_updating()
+        
+        if not epoch % print_every or epoch == train_steps -1:
+            print(f'epoch: {epoch}\nacc: {accuracy:.3f}\nloss: {loss:.3f}\n')
+            
+        loss_history.append(loss)
+        
+    plt.plot(loss_history)
+    plt.title('Loss over training')
+    plt.xlabel('Iteration')
+    plt.ylabel('Loss')
+    plt.show()
+        
+train(X, y, dense_layer_1, dense_layer_2, activation_1, activation_2, loss_activation, optimizer, epochs=1000, batch_size=10, print_every=100)
+# X_test, y_test = spiral_data(50, 2)
+# y_test = y_test.reshape(-1, 1)
 
-dl1.forward(X_test)
-act1.forward(dl1.output)
-dl2.forward(act1.output)
-act2.forward(dl2.output)
-loss = loss_act.calc(act2.output, y_test)
-predictions = (act2.output > 0.5) * 1
-accuracy = np.mean(predictions == y_test)
+# dl1.forward(X_test)
+# act1.forward(dl1.output)
+# dl2.forward(act1.output)
+# act2.forward(dl2.output)
+# loss = loss_act.calc(act2.output, y_test)
+# predictions = (act2.output > 0.5) * 1
+# accuracy = np.mean(predictions == y_test)
 
-print("\nTESTING RESULTS:")
-print(f'validation, acc: {accuracy:.3f}, loss: {loss:.3f}')
+# print("\nTESTING RESULTS:")
+# print(f'validation, acc: {accuracy:.3f}, loss: {loss:.3f}')
