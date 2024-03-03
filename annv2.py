@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
 import os
 import cv2
 import tkinter as tk
@@ -27,39 +28,27 @@ from PIL import Image, ImageDraw
 # plt.show()
 
 def load_mnist_dataset(dataset, path):
-    labels = os.listdir(os.path.join(path, dataset))
-    
-    X = []
-    y = []
-    
-    for label in labels:
-        for file in os.listdir(os.path.join(path, dataset, label)):
-            image = cv2.imread(os.path.join(path, dataset, label, file), cv2.IMREAD_UNCHANGED)
-            
-            X.append(image)
-            y.append(label)
-            
+    data = pd.read_csv(os.path.join(path, dataset) + '.csv')
+
+    y = data['label'].values
+
+    X = data.drop('label', axis=1).values
+
     return np.array(X), np.array(y).astype('uint8')
 
 def create_data_mnist(path):
     X, y = load_mnist_dataset('train', path)
-    X_test, y_test = load_mnist_dataset('test', path)
-    
-    return X, y, X_test, y_test
+    return X, y
 
-X, y, X_test, y_test = create_data_mnist('fashion_mnist_images')
+X, y = create_data_mnist('./mnist_dataset')
 
 X = (X.reshape(X.shape[0], -1).astype(np.float32) - 127.5) / 127.5
-X_test = (X_test.reshape(X_test.shape[0], -1).astype(np.float32) - 127.5) / 127.5
 
 keys = np.array(range(X.shape[0]))
 np.random.shuffle(keys)
 
 X = X[keys]
 y = y[keys]
-
-# X = X[:15000]
-# y = y[:15000]
 
 class Layer_Dense:
     def __init__(self, n_inputs, n_neurons, w_regl1=0, w_regl2=0, b_regl1=0, b_regl2=0):
@@ -372,7 +361,7 @@ class Drawing_Panel:
         
     def paint(self, event):
         x, y = event.x, event.y
-        r = 5  
+        r = 10  
         self.canvas.create_oval(x - r, y - r, x + r, y + r, fill="black")
         self.draw.ellipse([x - r, y - r, x + r, y + r], fill="black")
         
@@ -404,7 +393,7 @@ loss_activation = Loss_CCE()
 # optimizer = Stochastic_GD(learning_rate=1., decay=1e-3, momentum=0.9)
 # optimizer = AdaGrad(learning_rate=1., decay=1e-3)
 # optimizer = RMSProp(learning_rate=0.02, decay=1e-5, rho=0.999)
-optimizer = Adam(learning_rate=0.01, decay=5e-5)
+optimizer = Adam(learning_rate=0.01, decay=5e-7)
 
 def train(X, y, dl1, dl2, act1, act2, loss_act, optimizer, epochs=1, batch_size=None, print_every=1):
     train_steps = 1
@@ -467,19 +456,6 @@ def train(X, y, dl1, dl2, act1, act2, loss_act, optimizer, epochs=1, batch_size=
         
 train(X, y, dense_layer_1, dense_layer_2, activation_1, activation_2, loss_activation, optimizer, epochs=250, batch_size=10, print_every=50)
 
-fashion_mnist_labels = {
-    0: 'Remera',
-    1: 'Pantalon',
-    2: 'Pullover',
-    3: 'Vestido',
-    4: 'Campera',
-    5: 'Sandalia',
-    6: 'Camisa',
-    7: 'Zapatilla',
-    8: 'Bolso',
-    9: 'Bota'
-}
-
 while True:
     opt = input("Seguir? (Y,N): ")
     
@@ -503,4 +479,4 @@ while True:
     prediction = np.argmax(output, axis=1)[0]
     print(prediction)
 
-    print(f'================================\nEsto es: {fashion_mnist_labels[prediction]}')
+    print(f'================================\nEsto es: {prediction}')
