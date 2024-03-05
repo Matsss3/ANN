@@ -6,6 +6,7 @@ import cv2
 import tkinter as tk
 from tkinter import Canvas, Button
 from PIL import Image, ImageDraw
+import random
 
 # np.random.seed(0)
 
@@ -40,15 +41,39 @@ def create_data_mnist(path):
     X, y = load_mnist_dataset('train', path)
     return X, y
 
-X, y = create_data_mnist('./mnist_dataset')
+def rotate_imgs(images, angle):
+    for image in images:
+        img = Image.fromarray(image.reshape(28,28))
+        rotated_img = img.rotate(random.randint(-(angle), angle))
+        image = np.array(rotated_img)
+        image.flatten()
 
-X = (X.reshape(X.shape[0], -1).astype(np.float32) - 127.5) / 127.5
+    return images
+
+def translate_imgs(images):
+    shift = (random.randint(-5, 5), random.randint(-5, 5))
+    for image in images:
+        trans_img = Image.fromarray(image.reshape(28,28))
+        image = trans_img.transform(trans_img.size, Image.AFFINE, (1, 0, shift[0], 0, 1, shift[1]))
+    
+    return images
+
+def preprocessing(images):
+    return translate_imgs(rotate_imgs(images, 9))
+
+X, y = create_data_mnist('./mnist_dataset')
 
 keys = np.array(range(X.shape[0]))
 np.random.shuffle(keys)
 
 X = X[keys]
 y = y[keys]
+
+X = X.reshape(X.shape[0], -1).astype(np.float32)
+
+preprocessing(X)
+
+X = (X - 127.5) / 127.5
 
 class Layer_Dense:
     def __init__(self, n_inputs, n_neurons, w_regl1=0, w_regl2=0, b_regl1=0, b_regl2=0):
@@ -361,7 +386,7 @@ class Drawing_Panel:
         
     def paint(self, event):
         x, y = event.x, event.y
-        r = 10  
+        r = 15  
         self.canvas.create_oval(x - r, y - r, x + r, y + r, fill="black")
         self.draw.ellipse([x - r, y - r, x + r, y + r], fill="black")
         
@@ -386,16 +411,19 @@ def pre_process_image(URL):
 dense_layer_1 = Layer_Dense(X.shape[1], 64, w_regl2=5e-4, b_regl2=5e-4)
 activation_1 = Activation_ReLU()
 
-dense_layer_2 = Layer_Dense(64, 10)
-activation_2 = Activation_SoftMax()
+dense_layer_2 = Layer_Dense(64, 64)
+activation_2 = Activation_ReLU()
+
+dense_layer_3 = Layer_Dense(64, 10)
+activation_3 = Activation_SoftMax()
 loss_activation = Loss_CCE()
 
 # optimizer = Stochastic_GD(learning_rate=1., decay=1e-3, momentum=0.9)
 # optimizer = AdaGrad(learning_rate=1., decay=1e-3)
 # optimizer = RMSProp(learning_rate=0.02, decay=1e-5, rho=0.999)
-optimizer = Adam(learning_rate=0.01, decay=5e-7)
+optimizer = Adam(learning_rate=0.001, decay=5e-7)
 
-def train(X, y, dl1, dl2, act1, act2, loss_act, optimizer, epochs=1, batch_size=None, print_every=1):
+def train(X, y, dl1, dl2, dl3, act1, act2, act3, loss_act, optimizer, epochs=1, batch_size=None, print_every=1):
     train_steps = 1
     loss_history = []
         
@@ -420,20 +448,26 @@ def train(X, y, dl1, dl2, act1, act2, loss_act, optimizer, epochs=1, batch_size=
 
         dl2.forward(act1.output)
         act2.forward(dl2.output)
-        
-        data_loss = loss_act.calc(act2.output, batch_y)
 
-        predictions = np.argmax(act2.output, axis=1)
+        dl3.forward(act2.output)
+        act3.forward(dl3.output)
+        
+        data_loss = loss_act.calc(act3.output, batch_y)
+
+        predictions = np.argmax(act3.output, axis=1)
         if len(batch_y) == 2:
             batch_y = np.argmax(batch_y, axis=1)
         accuracy = np.mean(predictions == batch_y)
         
-        reg_loss = loss_act.regularization_loss(dl1) + loss_act.regularization_loss(dl2)
+        reg_loss = loss_act.regularization_loss(dl1) + loss_act.regularization_loss(dl2) + loss_act.regularization_loss(dl3)
         loss = data_loss + reg_loss 
 
-        loss_act.backward(act2.output, batch_y)
+        loss_act.backward(act3.output, batch_y)
         
-        act2.backward(loss_act.dinputs)
+        act3.backward(loss_act.dinputs)
+        dl3.backward(act3.dinputs)
+
+        act2.backward(dl3.dinputs)
         dl2.backward(act2.dinputs)
         
         act1.backward(dl2.dinputs)
@@ -441,6 +475,7 @@ def train(X, y, dl1, dl2, act1, act2, loss_act, optimizer, epochs=1, batch_size=
 
         optimizer.update_params(dl1)
         optimizer.update_params(dl2)
+        optimizer.update_params(dl3)
         optimizer.post_updating()
         
         if not epoch % print_every or epoch == train_steps -1:
@@ -454,7 +489,7 @@ def train(X, y, dl1, dl2, act1, act2, loss_act, optimizer, epochs=1, batch_size=
     plt.ylabel('Loss')
     plt.show()
         
-train(X, y, dense_layer_1, dense_layer_2, activation_1, activation_2, loss_activation, optimizer, epochs=250, batch_size=10, print_every=50)
+train(X=X, y=y, dl1=dense_layer_1, dl2=dense_layer_2, dl3=dense_layer_3, act1=activation_1, act2=activation_2, act3=activation_3, loss_act=loss_activation, optimizer=optimizer, epochs=500, batch_size=10, print_every=50)
 
 while True:
     opt = input("Seguir? (Y,N): ")
@@ -474,9 +509,11 @@ while True:
     dense_layer_2.forward(activation_1.output)
     activation_2.forward(dense_layer_2.output)
 
-    output = np.vstack(activation_2.output)
+    dense_layer_3.forward(activation_2.output)
+    activation_3.forward(dense_layer_3.output)
+
+    output = np.vstack(activation_3.output)
 
     prediction = np.argmax(output, axis=1)[0]
-    print(prediction)
 
     print(f'================================\nEsto es: {prediction}')
